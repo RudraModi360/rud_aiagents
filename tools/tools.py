@@ -3,7 +3,9 @@ import subprocess
 import re
 import docker
 from typing import Dict, Any, Set,Optional,List
+from groq import Groq
 
+client_groq = Groq()
 
 # --- Tool-related state ---
 global_read_files_tracker: Set[str] = set()
@@ -151,6 +153,22 @@ def list_files(directory: str = '.', pattern: str = '*.*', recursive: bool = Fal
 
     except Exception as e:
         return ToolResult(success=False, error=f"Failed to list files: {e}")
+
+def web_search(user_input: str) -> ToolResult:
+    try:
+        response = client_groq.chat.completions.create(
+                model="compound-beta",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": user_input
+                    }
+                ]
+            )
+        return ToolResult(success=True, content=response.choices[0].message.content)
+
+    except Exception as e:
+        return ToolResult(success=False, error=f"Failed to search web: {e}")
 
 def execute_command(command: str, command_type: str, working_directory: str = None, timeout: int = 300) -> ToolResult:
     try:
@@ -304,7 +322,8 @@ TOOL_REGISTRY = {
     "list_files": list_files,
     "search_files":search_files,
     "execute_command": execute_command,
-    "code_execute": sandbox_code_execute
+    "code_execute": sandbox_code_execute,
+    "web_search": web_search
 }
 
 def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> ToolResult:

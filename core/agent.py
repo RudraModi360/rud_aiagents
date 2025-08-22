@@ -34,6 +34,9 @@ class Agent:
     def _build_default_system_message(self) -> str:
         return f"""You are a coding assistant powered by {self.model} on Groq. Tools are available to you. Use tools to complete tasks.
 
+You have access to read-search across my local file-system's file too. here is my user's path  : {os.path.expanduser('~')}
+ and my current dir {os.getcwd()}
+
 CRITICAL: For ANY implementation request (building apps, creating components, writing code), you MUST use tools to create actual files. NEVER provide text-only responses for coding tasks that require implementation.
 
 Use tools to:
@@ -95,7 +98,7 @@ Be direct and efficient.
             )
 
             message = response.choices[0].message
-            print("Message : ",message)
+            # print("Message : ",message)
             self.messages.append(message)
 
             if not message.tool_calls:

@@ -130,6 +130,18 @@ LIST_FILES_SCHEMA = {
     }
 }
 
+class WebSearchParams(BaseModel):
+    user_input: str = Field('.', description='content to search for.')
+
+WEB_SEARCH = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "description": "Give the actual task to search over the internet.",
+        "parameters": WebSearchParams.model_json_schema()
+    }
+}
+
 # All tools combined
 ALL_TOOL_SCHEMAS = [
     READ_FILE_SCHEMA,
@@ -139,7 +151,8 @@ ALL_TOOL_SCHEMAS = [
     SEARCH_FILES_SCHEMA,
     LIST_FILES_SCHEMA,
     EXECUTE_COMMAND_SCHEMA,
-    EXECUTE_CODE
+    EXECUTE_CODE,
+    WEB_SEARCH
 ]
 
 # Tool categories
