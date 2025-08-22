@@ -75,11 +75,7 @@ The framework is designed to let you plug in custom tools with minimal effort.
    from .my_tool import my_tool, MyToolParams, MyToolResult
 
    TOOL_REGISTRY = {
-       "my_tool": {
-           "func": my_tool,
-           "params": MyToolParams,
-           "result": MyToolResult,
-       },
+       "my_tool": tool_name() ##class for tool
        # existing tools …
    }
    ```
@@ -96,8 +92,3 @@ The framework is designed to let you plug in custom tools with minimal effort.
 
 Feel free to submit pull requests for new commands, tools, or improvements. Follow the existing coding style and update the README when adding new top‑level modules.
 
----
-
-## License
-
-This project is licensed under the MIT License – see the `LICENSE` file for details.
