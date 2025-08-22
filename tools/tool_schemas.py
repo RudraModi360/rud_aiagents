@@ -110,7 +110,7 @@ SEARCH_FILES_SCHEMA = {
     "type": "function",
     "function": {
         "name": "search_files",
-        "description": "Find text patterns in files across the codebase.",
+        "description": "Find text patterns in ficles across the codebase.",
         "parameters": SearchFilesParams.model_json_schema()
     }
 }
