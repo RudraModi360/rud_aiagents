@@ -1,10 +1,13 @@
 import os
 import subprocess
 import re
-from typing import Dict, Any, Set
+import docker
+from typing import Dict, Any, Set,Optional,List
+
 
 # --- Tool-related state ---
 global_read_files_tracker: Set[str] = set()
+client = docker.from_env()
 
 class ToolResult(dict):
     def __init__(self, success: bool, content: Any = None, error: str = None):
@@ -176,6 +179,120 @@ def execute_command(command: str, command_type: str, working_directory: str = No
     except Exception as e:
         return ToolResult(success=False, error=f"Failed to execute command: {e}")
 
+def sandbox_code_execute(code: str, image_name: str = "rud_ai-agent", timeout: int = 5) -> ToolResult:
+    """
+    Executes Python code inside a Docker container (sandboxed).
+    """
+    try:
+        safe_code = code.replace('"', "'")
+        command = f'python -c "{safe_code}"'
+
+        output = client.containers.run(
+            image=image_name,
+            command=command,
+            remove=True,
+            stdout=True,
+            stderr=True,
+            tty=False,
+            detach=False,
+        )
+
+        return ToolResult(success=True, content=output.decode())
+
+    except Exception as e:
+        print(e)
+    
+
+# --- Tool Implementations ---
+
+def search_files(pattern: str, file_pattern: str = '*', directory: str = '.', case_sensitive: bool = False,
+                 pattern_type: str = 'substring', file_types: Optional[List[str]] = None,
+                 exclude_dirs: Optional[List[str]] = None, exclude_files: Optional[List[str]] = None,
+                 max_results: int = 100, context_lines: int = 0, group_by_file: bool = False) -> ToolResult:
+    """
+    Search for pattern in files.
+    """
+    try:
+        import fnmatch
+        from pathlib import Path
+        import difflib
+        results = []
+        abs_dir = os.path.abspath(directory)
+        if not os.path.isdir(abs_dir):
+            return ToolResult(success=False, error="Directory not found.")
+        # Prepare regex if needed
+        if pattern_type == 'regex':
+            regex = re.compile(pattern, 0 if case_sensitive else re.IGNORECASE)
+        # Walk files
+        for root, dirs, files in os.walk(abs_dir):
+            # Exclude dirs
+            if exclude_dirs:
+                dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            for file in files:
+                # Exclude files by pattern
+                if exclude_files and any(fnmatch.fnmatch(file, pat) for pat in exclude_files):
+                    continue
+                if not fnmatch.fnmatch(file, file_pattern):
+                    continue
+                if file_types:
+                    ext = os.path.splitext(file)[1].lstrip('.')
+                    if ext not in file_types:
+                        continue
+                file_path = os.path.join(root, file)
+                try:
+                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                        lines = f.readlines()
+                except Exception:
+                    continue
+                for idx, line in enumerate(lines, start=1):
+                    matched = False
+                    match_text = None
+                    if pattern_type == 'substring':
+                        if (line.find(pattern) != -1) if case_sensitive else (pattern.lower() in line.lower()):
+                            matched = True
+                            match_text = pattern
+                    elif pattern_type == 'exact':
+                        if (line.strip() == pattern) if case_sensitive else (line.strip().lower() == pattern.lower()):
+                            matched = True
+                            match_text = pattern
+                    elif pattern_type == 'regex':
+                        if regex.search(line):
+                            matched = True
+                            match_text = regex.search(line).group(0)
+                    elif pattern_type == 'fuzzy':
+                        # simple fuzzy: ratio > 0.8
+                        ratio = difflib.SequenceMatcher(None, pattern, line.strip()).ratio()
+                        if ratio > 0.8:
+                            matched = True
+                            match_text = line.strip()
+                    if matched:
+                        # context
+                        start = max(0, idx - context_lines - 1)
+                        end = min(len(lines), idx + context_lines)
+                        context = ''.join(lines[start:end]).strip()
+                        res = {
+                            'file': file_path,
+                            'line': idx,
+                            'match': match_text,
+                            'context': context
+                        }
+                        results.append(res)
+                        if len(results) >= max_results:
+                            break
+                if len(results) >= max_results:
+                    break
+            if len(results) >= max_results:
+                break
+        if group_by_file:
+            grouped = {}
+            for r in results:
+                grouped.setdefault(r['file'], []).append(r)
+            content = grouped
+        else:
+            content = results
+        return ToolResult(success=True, content=content)
+    except Exception as e:
+        return ToolResult(success=False, error=f"Failed to search files: {e}")
 
 # --- Tool Registry and Execution ---
 
@@ -185,7 +302,9 @@ TOOL_REGISTRY = {
     "edit_file": edit_file,
     "delete_file": delete_file,
     "list_files": list_files,
+    "search_files":search_files,
     "execute_command": execute_command,
+    "code_execute": sandbox_code_execute
 }
 
 def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> ToolResult:

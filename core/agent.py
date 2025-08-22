@@ -39,7 +39,8 @@ CRITICAL: For ANY implementation request (building apps, creating components, wr
 Use tools to:
 - Read and understand files (read_file, list_files)
 - Create, edit, and manage files (create_file, edit_file, delete_file)
-- Execute commands (execute_command)
+- Execute bash commands (execute_command)
+- Run python code in sandbox using the (code_execute)
 
 FILE OPERATION DECISION TREE:
 - ALWAYS check if file exists FIRST using list_files or read_file
@@ -94,6 +95,7 @@ Be direct and efficient.
             )
 
             message = response.choices[0].message
+            print("Message : ",message)
             self.messages.append(message)
 
             if not message.tool_calls:

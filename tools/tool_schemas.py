@@ -66,7 +66,7 @@ DELETE_FILE_SCHEMA = {
 # Code Execution Tools
 class ExecuteCommandParams(BaseModel):
     command: str = Field(..., description='Shell command to execute.')
-    command_type: Literal['bash', 'python', 'setup', 'run'] = Field(..., description='Command type.')
+    command_type: Literal['bash', 'setup', 'run'] = Field(..., description='Command type.')
     working_directory: Optional[str] = Field(None, description='Directory to run command in.')
     timeout: int = Field(300, description='Max execution time in seconds (1-300)', ge=1, le=300)
 
@@ -74,8 +74,21 @@ EXECUTE_COMMAND_SCHEMA = {
     "type": "function",
     "function": {
         "name": "execute_command",
-        "description": "Run shell commands, scripts, or code. Only for commands that complete quickly.",
+        "description": "Run shell commands, scripts. Only for commands that complete quickly.",
         "parameters": ExecuteCommandParams.model_json_schema()
+    }
+}
+
+class ExecuteCode(BaseModel):
+    code: str = Field(..., description='Python command to execute.')
+    timeout: int = Field(300, description='Max execution time in seconds (1-100)', ge=1, le=100)
+
+EXECUTE_CODE = {
+    "type": "function",
+    "function": {
+        "name": "code_execute",
+        "description": "Run python code.",
+        "parameters": ExecuteCode.model_json_schema()
     }
 }
 
@@ -125,10 +138,11 @@ ALL_TOOL_SCHEMAS = [
     DELETE_FILE_SCHEMA,
     SEARCH_FILES_SCHEMA,
     LIST_FILES_SCHEMA,
-    EXECUTE_COMMAND_SCHEMA
+    EXECUTE_COMMAND_SCHEMA,
+    EXECUTE_CODE
 ]
 
 # Tool categories
-SAFE_TOOLS = ['read_file', 'list_files', 'search_files']
+SAFE_TOOLS = ['read_file', 'list_files', 'search_files','sandbox_code_execute']
 APPROVAL_REQUIRED_TOOLS = ['create_file', 'edit_file']
 DANGEROUS_TOOLS = ['delete_file', 'execute_command']

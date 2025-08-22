@@ -67,7 +67,7 @@ The framework is designed to let you plug in custom tools with minimal effort.
 2. **Define a Pydantic schema** (or reuse `tool_schemas.py`) that describes the input parameters and output format.
 3. **Implement the tool function** following the signature:
    ```python
-   async def my_tool(params: MyToolParams) -> MyToolResult:
+   def my_tool(params: MyToolParams) -> ToolResult:
        # Your logic here
    ```
 4. **Register the tool** in `tools/__init__.py` (or modify `tools/tools.py`) by adding it to the exported dictionary:
@@ -83,10 +83,7 @@ The framework is designed to let you plug in custom tools with minimal effort.
        # existing tools …
    }
    ```
-5. **Use the tool** from any command or from the agent by calling:
-   ```python
-   result = await agent.run_tool("my_tool", input_data)
-   ```
+
 
 ### Tips
 - Keep the tool **stateless** or manage state through the `Agent` instance.
