@@ -6,6 +6,16 @@ This repository contains a lightweight, extensible **Python Agent** framework de
 
 ---
 
+## Docker
+
+To build the Docker image locally (since it is not uploaded to Docker Hub), run the following command in the project root:
+
+```bash
+docker build -t rud_ai-agent .
+```
+
+This will create a Docker image named `rud_ai-agent` using the provided `Dockerfile`.
+
 ## File Tree
 
 ```

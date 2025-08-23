@@ -14,7 +14,7 @@ RUN pip install pandas numpy matplotlib scipy seaborn scikit-learn pyarrow tabul
 
 # Create necessary directories
 RUN mkdir -p /mnt/data /mnt/jupyter_sessions /workspace
-
+RUN cd /mnt/data
 
 # Set environment variables for mounted volumes
 ENV DATA_DIR=/mnt/data
