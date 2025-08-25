@@ -6,7 +6,44 @@ This repository contains a lightweight, extensible **Python Agent** framework de
 
 ---
 
-## File Tree
+## Project Structure
+
+The project is organized into several key directories and files, each serving a specific purpose in the overall functionality of the Python Agent framework.
+
+### Directories
+
+1. **commands/**: Contains the infrastructure for command handling.
+   - `base.py`: Defines the base class for all commands, providing a common interface.
+   - `registry.py`: Manages the registration of commands, making them discoverable.
+   - `definitions/`: Houses concrete implementations of commands.
+
+2. **core/**: Hosts the core functionality of the agent.
+   - `agent.py`: Implements the central `Agent` class that orchestrates commands and tools.
+   - `cli.py`: Handles the command-line interface, parsing user input and displaying results.
+
+3. **tools/**: Includes definitions for built-in tools.
+   - `tools.py`: Contains the collection of tool functions.
+   - `tool_schemas.py`: Defines Pydantic models for tool inputs and outputs, ensuring type safety.
+
+4. **utils/**: Provides utility functions and settings.
+   - `local_settings.py`: Stores local configuration such as API keys and default settings.
+
+### Files
+
+- `main.py`: The entry point for running the agent.
+- `__init__.py`: Marks the directory as a Python package.
+
+## Adding New Tools
+
+To add a new tool:
+1. Create a new module in `tools/`.
+2. Define a Pydantic schema for the tool's input and output.
+3. Implement the tool function.
+4. Register the tool in `tools/__init__.py`.
+
+## Contributing
+
+Contributions are welcome. Please follow the existing coding style and update the README as necessary.
 
 ```
 python_agent/
@@ -59,7 +96,18 @@ python_agent/
 
 ---
 
-## Adding Your Own Tools
+## Tools
+
+The Python Agent comes with the following built-in tools:
+1. `read_file`: Read file contents with optional line range.
+2. `create_file`: Create NEW files or directories.
+3. `edit_file`: Modify EXISTING files by exact text replacement.
+4. `delete_file`: Remove files or directories.
+5. `search_files`: Find text patterns in files across the codebase.
+6. `list_files`: Browse directory contents and file structure.
+7. `execute_command`: Run shell commands, scripts.
+8. `code_execute`: Run python code.
+9. `web_search`: Search the web for information.
 
 The framework is designed to let you plug in custom tools with minimal effort.
 
