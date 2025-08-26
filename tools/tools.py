@@ -1,7 +1,8 @@
 import os
 import subprocess
 import re
-import docker
+import requests
+# import docker
 from typing import Dict, Any, Set,Optional,List
 from groq import Groq
 
@@ -9,7 +10,7 @@ client_groq = Groq()
 
 # --- Tool-related state ---
 global_read_files_tracker: Set[str] = set()
-client = docker.from_env()
+# client = docker.from_env()
 
 class ToolResult(dict):
     def __init__(self, success: bool, content: Any = None, error: str = None):
@@ -197,28 +198,30 @@ def execute_command(command: str, command_type: str, working_directory: str = No
     except Exception as e:
         return ToolResult(success=False, error=f"Failed to execute command: {e}")
 
-def sandbox_code_execute(code: str, image_name: str = "rud_ai-agent", timeout: int = 5) -> ToolResult:
+def sandbox_code_execute(code: str, timeout: int = 60) -> ToolResult:
     """
-    Executes Python code inside a Docker container (sandboxed).
+    Executes Python code in a restricted environment and returns the output.
     """
     try:
-        safe_code = code.replace('"', "'")
-        command = f'python -c "{safe_code}"'
-
-        output = client.containers.run(
-            image=image_name,
-            command=command,
-            remove=True,
-            stdout=True,
-            stderr=True,
-            tty=False,
-            detach=False,
+        process = subprocess.run(
+            ['python', '-c', code],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False
         )
+        
+        output = f"STDOUT:\n{process.stdout}\nSTDERR:\n{process.stderr}"
 
-        return ToolResult(success=True, content=output.decode())
+        if process.returncode == 0:
+            return ToolResult(success=True, content=output)
+        else:
+            return ToolResult(success=False, content=output, error=f"Code execution failed with exit code {process.returncode}")
 
+    except subprocess.TimeoutExpired:
+        return ToolResult(success=False, error="Code execution timed out.")
     except Exception as e:
-        print(e)
+        return ToolResult(success=False, error=f"Failed to execute code: {e}")
     
 
 # --- Tool Implementations ---
@@ -312,6 +315,14 @@ def search_files(pattern: str, file_pattern: str = '*', directory: str = '.', ca
     except Exception as e:
         return ToolResult(success=False, error=f"Failed to search files: {e}")
 
+def url_fetch(url: str) -> ToolResult:
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        return ToolResult(success=True, content=response.text)
+    except requests.exceptions.RequestException as e:
+        return ToolResult(success=False, error=f"Failed to fetch URL: {e}")
+
 # --- Tool Registry and Execution ---
 
 TOOL_REGISTRY = {
@@ -323,7 +334,8 @@ TOOL_REGISTRY = {
     "search_files":search_files,
     "execute_command": execute_command,
     "code_execute": sandbox_code_execute,
-    "web_search": web_search
+    "web_search": web_search,
+    "url_fetch": url_fetch
 }
 
 def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> ToolResult:

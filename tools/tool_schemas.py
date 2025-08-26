@@ -80,14 +80,14 @@ EXECUTE_COMMAND_SCHEMA = {
 }
 
 class ExecuteCode(BaseModel):
-    code: str = Field(..., description='Python command to execute.')
-    timeout: int = Field(300, description='Max execution time in seconds (1-100)', ge=1, le=100)
+    code: str = Field(..., description='The Python code to execute.')
+    timeout: int = Field(60, description='Max execution time in seconds (1-300)', ge=1, le=300)
 
 EXECUTE_CODE = {
     "type": "function",
     "function": {
         "name": "code_execute",
-        "description": "Run python code.",
+        "description": "Executes Python code and returns the output. The code should be self-contained.",
         "parameters": ExecuteCode.model_json_schema()
     }
 }
@@ -142,6 +142,19 @@ WEB_SEARCH = {
     }
 }
 
+class UrlFetchParams(BaseModel):
+    url: str = Field(..., description='URL to fetch content from.')
+
+URL_FETCH_SCHEMA = {
+    "type": "function",
+    
+    "function": {
+        "name": "url_fetch",
+        "description": "Fetch content from a URL.",
+        "parameters": UrlFetchParams.model_json_schema()
+    }
+}
+
 # All tools combined
 ALL_TOOL_SCHEMAS = [
     READ_FILE_SCHEMA,
@@ -152,10 +165,11 @@ ALL_TOOL_SCHEMAS = [
     LIST_FILES_SCHEMA,
     EXECUTE_COMMAND_SCHEMA,
     EXECUTE_CODE,
-    WEB_SEARCH
+    WEB_SEARCH,
+    URL_FETCH_SCHEMA
 ]
 
 # Tool categories
-SAFE_TOOLS = ['read_file', 'list_files', 'search_files','sandbox_code_execute']
+SAFE_TOOLS = ['read_file', 'list_files', 'search_files','sandbox_code_execute', 'url_fetch']
 APPROVAL_REQUIRED_TOOLS = ['create_file', 'edit_file']
 DANGEROUS_TOOLS = ['delete_file', 'execute_command']

@@ -1,5 +1,5 @@
 import asyncio
-from core.cli import main
+from core.cli_mcp import main
 
 if __name__ == "__main__":
     try:
