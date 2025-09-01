@@ -10,15 +10,29 @@ with open("mcp_tools.json","r") as f:
     mcp_servers=json.loads(f.read())['mcpServers']
 
 sessions = {}
+mcp_clients = {}
 
 async def init_sessions():
     for name, args in mcp_servers.items():
         params = StdioServerParameters(command=args.get('command'), args=args.get('args'))
-        read, write = await stdio_client(params).__aenter__()
-        session = await ClientSession(read, write).__aenter__()
+
+        client = stdio_client(params)
+        mcp_clients[name] = client
+        read, write = await client.__aenter__()
+
+        session = ClientSession(read, write)
+        await session.__aenter__()
+
         await session.initialize()
+
         sessions[name] = session
         print(f"[SYSTEM] Connected to MCP server: {name}")
+
+async def shutdown_sessions():
+    for session in sessions.values():
+        await session.__aexit__(None, None, None)
+    for client in mcp_clients.values():
+        await client.__aexit__(None, None, None)
 
 async def tool_approval_callback(tool_name: str, tool_args: dict) -> bool:
     print(f"\n[APPROVAL] Tool requested: {tool_name}")
@@ -46,7 +60,7 @@ async def main():
 
     agent = MCPAgent(model=args.model)
     await init_sessions()
-    command_registry = CommandRegistry(agent,sessions)
+    command_registry = CommandRegistry(agent, sessions)
 
     agent.set_tool_callbacks(
         on_tool_approval=tool_approval_callback,
@@ -57,28 +71,27 @@ async def main():
 
     print("Welcome to the Python Groq Agent. Type /help for commands.")
     print("MCP Based Agent is Working Currently...")
-    # async with stdio_client(server_params) as (read, write):
-    #     async with ClientSession(read, write) as session:
-    #         await session.initialize()
-            
-    while True:
-        try:
-            user_input = input("\n[YOU] ")
-            if user_input.startswith('/'):
-                response = command_registry.handle_command(user_input)
-                if isinstance(response,str):
-                    print(f"\n[SYSTEM] {response}")
-                if isinstance(response,list):
-                    print("Available MCP server : ",response)
-                if isinstance(response,ClientSession):
-                    print("[SYSTEM] Connected to MCP server:")
-            else:
-                await agent.chat(response,user_input)
-        except KeyboardInterrupt:
-            print("\nExiting agent.")
-            break
-        except Exception as e:
-            print(f"\nAn error occurred: {e}")
 
+    try:
+        while True:
+            try:
+                user_input = input("\n[YOU] ")
+                if user_input.startswith('/'):
+                    response = command_registry.handle_command(user_input)
+                    if isinstance(response, str):
+                        print(f"\n[SYSTEM] {response}")
+                    elif isinstance(response, list):
+                        print("Available MCP server : ", response)
+                    elif isinstance(response, ClientSession):
+                        print("[SYSTEM] Connected to MCP server:")
+                else:
+                    await agent.chat(sessions, user_input)
+            except KeyboardInterrupt:
+                print("\nExiting agent.")
+                break
+            except Exception as e:
+                print(f"\nAn error occurred: {e}")
+    finally:
+        await shutdown_sessions()
 if __name__ == "__main__":
     asyncio.run(main())

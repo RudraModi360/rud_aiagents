@@ -234,21 +234,34 @@ End of directive.
             formatted_tools.append(schema)
         return formatted_tools
 
-    async def chat(self,session:ClientSession, user_input: str):
+    async def chat(self, sessions: Dict[str, ClientSession], user_input: str):
         if not self.client:
             raise ValueError("API key not set. Please set it via set_api_key or GROQ_API_KEY env var.")
 
         self.messages.append({"role": "user", "content": user_input})
         
-        mcp_tools = await session.list_tools()
-        mcp_tool_names = {tool.name for tool in mcp_tools.tools}
+        all_mcp_tools_list = []
+        mcp_tool_to_session_map = {}
+        
+        class ToolsContainer:
+            def __init__(self, tools):
+                self.tools = tools
+
+        for session_name, session in sessions.items():
+            mcp_tools = await session.list_tools()
+            all_mcp_tools_list.extend(mcp_tools.tools)
+            for tool in mcp_tools.tools:
+                mcp_tool_to_session_map[tool.name] = session
+        
+        mcp_tool_names = set(mcp_tool_to_session_map.keys())
+        mcp_tools_container = ToolsContainer(all_mcp_tools_list)
 
         max_iterations = 10
         for _ in range(max_iterations):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
-                tools=self.list_mcp_tools_schema(mcp_tools) + ALL_TOOL_SCHEMAS,
+                tools=self.list_mcp_tools_schema(mcp_tools_container) + ALL_TOOL_SCHEMAS,
                 tool_choice="auto",
                 parallel_tool_calls=True,
                 temperature=self.temperature,
@@ -266,15 +279,15 @@ End of directive.
             
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
-                mcp_or_not = tool_name in mcp_tool_names
+                is_mcp_tool = tool_name in mcp_tool_names
                 tool_args = json.loads(tool_call.function.arguments)
 
                 if self.on_tool_start:
                     self.on_tool_start(tool_name, tool_args)
                 
-                print("MCP/Built-in : ", mcp_or_not)
+                print("MCP/Built-in : ", is_mcp_tool)
                 
-                if not mcp_or_not:  # Built-in tools
+                if not is_mcp_tool:  # Built-in tools
                     needs_approval = tool_name in DANGEROUS_TOOLS or tool_name in APPROVAL_REQUIRED_TOOLS
                 
                     if needs_approval and self.on_tool_approval:
@@ -295,6 +308,7 @@ End of directive.
                         "content": json.dumps(tool_result),
                     })
                 else:  # MCP tools
+                    session_for_tool = mcp_tool_to_session_map[tool_name]
                     needs_approval = "create" in tool_name or "delete" in tool_name or "edit" in tool_name
                     if needs_approval and self.on_tool_approval:
                         approved = await self.on_tool_approval(tool_name, tool_args)
@@ -302,9 +316,9 @@ End of directive.
                             tool_result = None
                             tool_result_for_model = json.dumps({"success": False, "error": "Tool execution denied by user."})
                         else:
-                            tool_result = await session.call_tool(name=tool_name, arguments=tool_args)
+                            tool_result = await session_for_tool.call_tool(name=tool_name, arguments=tool_args)
                     else:
-                        tool_result = await session.call_tool(name=tool_name, arguments=tool_args)
+                        tool_result = await session_for_tool.call_tool(name=tool_name, arguments=tool_args)
 
                     if tool_result:
                         if tool_result.isError:
