@@ -217,7 +217,13 @@ End of directive.
         self.config_manager.set_api_key(api_key)
 
     def clear_history(self):
-        self.messages = [msg for msg in self.messages if msg['role'] == 'system']
+        for msg in self.messages:
+            if isinstance(msg,dict):
+                if msg['role'] != 'system':
+                    self.messages.remove(msg)
+            else:
+                if msg.role != 'system':
+                    self.messages.remove(msg)
         
     def list_mcp_tools_schema(self,tools:list):
         formatted_tools = []
