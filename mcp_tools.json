@@ -3,6 +3,16 @@
       "excel": {
          "command": "uvx",
          "args": ["excel-mcp-server", "stdio"]
-      }
+      },
+      "whatsapp": {
+			"command": "uv",
+			"args": [
+				"--directory",
+				"D:\\whatsapp-mcp\\whatsapp-mcp-server",
+				"run",
+				"main.py"
+			],
+			"type": "stdio"
+		}
    }
 }
