@@ -315,33 +315,69 @@ End of directive.
                     })
                 else:  # MCP tools
                     session_for_tool = mcp_tool_to_session_map[tool_name]
-                    needs_approval = "create" in tool_name or "delete" in tool_name or "edit" in tool_name
+                    needs_approval = "create" in tool_name or "delete" in tool_name or "edit" in tool_name or "send" in tool_name
+                    
+                    tool_result_for_model = None
+                    approved = True
                     if needs_approval and self.on_tool_approval:
                         approved = await self.on_tool_approval(tool_name, tool_args)
-                        if not approved:
-                            tool_result = None
-                            tool_result_for_model = json.dumps({"success": False, "error": "Tool execution denied by user."})
-                        else:
-                            tool_result = await session_for_tool.call_tool(name=tool_name, arguments=tool_args)
-                    else:
-                        tool_result = await session_for_tool.call_tool(name=tool_name, arguments=tool_args)
 
-                    if tool_result:
-                        if tool_result.isError:
-                            error_content = tool_result.structuredContent or {'result': 'MCP tool execution failed.'}
-                            if self.on_tool_end:
-                                self.on_tool_end(tool_name, {"success": False, "error": error_content.get('result', 'Unknown MCP error')})
-                            tool_result_for_model = json.dumps(error_content)
-                        else:
-                            success_content = tool_result.structuredContent or {'content': tool_result.content}
-                            if self.on_tool_end:
-                                self.on_tool_end(tool_name, {"success": True, "content": tool_result.content})
-                            tool_result_for_model = json.dumps(success_content)
-                    else:
-                        error_content = {"success": False, "error": "MCP tool returned no result."}
+                    if not approved:
+                        error_content = {"success": False, "error": "Tool execution denied by user."}
                         if self.on_tool_end:
                             self.on_tool_end(tool_name, error_content)
                         tool_result_for_model = json.dumps(error_content)
+                    else:
+                        tool_result = await session_for_tool.call_tool(name=tool_name, arguments=tool_args)
+                        print("tool_result : ",tool_result," Type : ",type(tool_result))
+                        if tool_result:
+                            raw_content = tool_result.content
+                            processed_content = raw_content
+                            if isinstance(raw_content, list):
+                                new_list = []
+                                for item in raw_content:
+                                    if hasattr(item, 'text') and isinstance(item.text, str):
+                                        try:
+                                            new_list.append(json.loads(item.text))
+                                        except json.JSONDecodeError:
+                                            new_list.append(item.text)
+                                    else:
+                                        new_list.append(item)
+                                processed_content = new_list
+                            elif hasattr(raw_content, 'text') and isinstance(raw_content.text, str):
+                                try:
+                                    processed_content = json.loads(raw_content.text)
+                                except json.JSONDecodeError:
+                                    processed_content = raw_content.text
+
+                            if tool_result.isError:
+                                content_for_model = tool_result.structuredContent
+                                if content_for_model is None:
+                                    content_for_model = {'result': processed_content or 'MCP tool execution failed.'}
+                                
+                                if self.on_tool_end:
+                                    error_for_display = content_for_model
+                                    if isinstance(content_for_model, dict):
+                                        error_for_display = content_for_model.get('result', json.dumps(content_for_model))
+                                    else:
+                                        error_for_display = str(content_for_model)
+                                    self.on_tool_end(tool_name, {"success": False, "error": error_for_display})
+                                
+                                tool_result_for_model = json.dumps(content_for_model)
+                            else: # success
+                                content_for_model = tool_result.structuredContent
+                                if content_for_model is None:
+                                    content_for_model = processed_content
+                                
+                                if self.on_tool_end:
+                                    self.on_tool_end(tool_name, {"success": True, "content": content_for_model})
+                                
+                                tool_result_for_model = json.dumps(content_for_model)
+                        else: # no result
+                            error_content = {"success": False, "error": "MCP tool returned no result."}
+                            if self.on_tool_end:
+                                self.on_tool_end(tool_name, error_content)
+                            tool_result_for_model = json.dumps(error_content)
                 
                     self.messages.append({
                         "role": "tool",
