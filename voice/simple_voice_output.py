@@ -1,23 +1,44 @@
 import json
 import numpy as np
 import gradio as gr
+import sounddevice as sd  # better low-latency audio playback
 from groq import Groq
 from fastrtc import get_tts_model
-import simpleaudio as sa  # For background audio playback
 
 tts_model = get_tts_model()
 groq = Groq()
 
 conversations: dict[str, list[dict[str, str]]] = {}
 
-def play_audio(chunk, rate):
-    # Ensure int16
-    if chunk.dtype != np.int16:
-        chunk = (chunk * 32767).astype(np.int16)
-    # Play audio in background
-    sa.play_buffer(chunk, 1, 2, rate)
+
+def play_audio_stream(text: str):
+    """Stream TTS audio directly to speaker using sounddevice."""
+    stream = None
+    samplerate = None
+
+    try:
+        for rate, chunk in tts_model.stream_tts_sync(text):
+            if stream is None:  # Open stream on first chunk
+                samplerate = rate
+                stream = sd.OutputStream(samplerate=rate, channels=1, dtype="float32")
+                stream.start()
+
+            # Ensure float32 (sounddevice expects float32 in -1..1)
+            if chunk.dtype != np.float32:
+                audio = chunk.astype(np.float32)
+            else:
+                audio = chunk
+
+            stream.write(audio)
+
+    finally:
+        if stream:
+            stream.stop()
+            stream.close()
+
 
 def chat_stream(user_text, history, session_id="default"):
+    """Chat + background TTS playback."""
     if session_id not in conversations:
         conversations[session_id] = [
             {
@@ -55,11 +76,12 @@ def chat_stream(user_text, history, session_id="default"):
     history.append({"role": "user", "content": user_text})
     history.append({"role": "assistant", "content": long_response})
 
-    # Play TTS audio in background without UI
-    for rate, chunk in tts_model.stream_tts_sync(short_response):
-        play_audio(chunk, rate)
+    # 🔊 Play TTS in background (non-blocking)
+    import threading
+    threading.Thread(target=play_audio_stream, args=(short_response,), daemon=True).start()
 
     return history
+
 
 # Gradio UI
 with gr.Blocks(css="""
