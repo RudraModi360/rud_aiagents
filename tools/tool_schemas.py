@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Literal, Optional
+from typing import List, Literal, Optional,Dict,Union,Any
 
 class ToolSchema(BaseModel):
     type: str = "function"
@@ -155,6 +155,41 @@ URL_FETCH_SCHEMA = {
     }
 }
 
+class ManageMemoryParams(BaseModel):
+    input_data: Union[str, Dict[str, Any]] = Field(
+        ...,
+        description="Input for managing memory. Can be a plain string or a structured JSON object."
+    )
+
+
+MANAGE_MEMORY = {
+    "type": "function",
+    "function": {
+        "name": "manage_memory",
+        "description": "Store or update information in memory.",
+        "parameters": ManageMemoryParams.model_json_schema()
+    }
+}
+
+
+# 🔹 Search Memory: accepts only string
+class SearchMemoryParams(BaseModel):
+    query: str = Field(
+        ...,
+        description="The search query string to look up in memory."
+    )
+
+
+SEARCH_MEMORY = {
+    "type": "function",
+    "function": {
+        "name": "search_memory",
+        "description": "Search stored information in memory.",
+        "parameters": SearchMemoryParams.model_json_schema()
+    }
+}
+
+
 # All tools combined
 ALL_TOOL_SCHEMAS = [
     READ_FILE_SCHEMA,
@@ -166,7 +201,9 @@ ALL_TOOL_SCHEMAS = [
     EXECUTE_COMMAND_SCHEMA,
     EXECUTE_CODE,
     WEB_SEARCH,
-    URL_FETCH_SCHEMA
+    URL_FETCH_SCHEMA,
+    MANAGE_MEMORY,
+    SEARCH_MEMORY
 ]
 
 # Tool categories

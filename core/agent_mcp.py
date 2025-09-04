@@ -8,7 +8,8 @@ from utils.local_settings import ConfigManager
 from tools.tool_schemas import ALL_TOOL_SCHEMAS, DANGEROUS_TOOLS, APPROVAL_REQUIRED_TOOLS,SAFE_TOOLS
 from tools.tools import execute_tool
 from utils.local_settings import ConfigManager
-
+from langmem import create_manage_memory_tool
+from tools.tools import store
 
 class MCPAgent:
     def __init__(
@@ -27,6 +28,7 @@ class MCPAgent:
         self.system_message = system_message or self._build_default_system_message()
         self.messages.append({"role": "system", "content": self.system_message})
         self.debug = debug
+        self.memory_tool = create_manage_memory_tool(namespace=("messages",), store=store)
 
         # Callbacks
         self.on_tool_start: Callable[[str, Dict], None] = None
@@ -161,6 +163,22 @@ C) **Output:**
 
 ---
 
+# MEMORY (manage_memory / search_memory)
+A) **Use Cases:**
+- `manage_memory`: To remember key facts, user preferences, or conversation summaries for future sessions. The document should be a concise piece of information.
+- `search_memory`: To retrieve information that was previously stored. Use this to recall context from past conversations.
+
+B) **Rules:**
+- Before asking the user for information they might have already provided, use `search_memory`.
+- When learning a new important piece of information that should be remembered, use `manage_memory`.
+- The memory is for long-term storage. Do not clutter it with trivial details from the current conversation. Store summaries or key takeaways.
+
+C) **Output:**
+- `manage_memory`: Returns a confirmation of storage.
+- `search_memory`: Returns relevant memories found.
+
+---
+
 # ENGINEERING PRACTICES
 1. **Tests:** Always add at least one unit test with sample input/output.  
 2. **Docs:** Every file → short top-of-file docstring with usage/examples.  
@@ -244,7 +262,9 @@ End of directive.
         if not self.client:
             raise ValueError("API key not set. Please set it via set_api_key or GROQ_API_KEY env var.")
 
-        self.messages.append({"role": "user", "content": user_input})
+        user_message = {"role": "user", "content": user_input}
+        self.messages.append(user_message)
+        self.memory_tool.func(json.dumps(user_message))
         
         all_mcp_tools_list = []
         mcp_tool_to_session_map = {}
@@ -261,13 +281,15 @@ End of directive.
         
         mcp_tool_names = set(mcp_tool_to_session_map.keys())
         mcp_tools_container = ToolsContainer(all_mcp_tools_list)
-
+        
+        all_tool_schemas = self.list_mcp_tools_schema(mcp_tools_container) + ALL_TOOL_SCHEMAS
+ 
         max_iterations = 10
         for _ in range(max_iterations):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
-                tools=self.list_mcp_tools_schema(mcp_tools_container) + ALL_TOOL_SCHEMAS,
+                tools=all_tool_schemas,
                 tool_choice="auto",
                 parallel_tool_calls=True,
                 temperature=self.temperature,
@@ -275,6 +297,7 @@ End of directive.
 
             message = response.choices[0].message
             self.messages.append(message)
+            self.memory_tool.func(json.dumps(message.model_dump()))
 
             if not message.tool_calls:
                 if self.on_final_message:
@@ -292,6 +315,7 @@ End of directive.
                     self.on_tool_start(tool_name, tool_args)
                 
                 print("MCP/Built-in : ", is_mcp_tool)
+                tool_message_to_append = None
                 
                 if not is_mcp_tool:  # Built-in tools
                     needs_approval = tool_name in DANGEROUS_TOOLS or tool_name in APPROVAL_REQUIRED_TOOLS
@@ -308,11 +332,11 @@ End of directive.
                     if self.on_tool_end:
                         self.on_tool_end(tool_name, tool_result)
                     
-                    self.messages.append({
+                    tool_message_to_append = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": json.dumps(tool_result),
-                    })
+                    }
                 else:  # MCP tools
                     session_for_tool = mcp_tool_to_session_map[tool_name]
                     needs_approval = "create" in tool_name or "delete" in tool_name or "edit" in tool_name or "send" in tool_name
@@ -379,11 +403,15 @@ End of directive.
                                 self.on_tool_end(tool_name, error_content)
                             tool_result_for_model = json.dumps(error_content)
                 
-                    self.messages.append({
+                    tool_message_to_append = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": tool_result_for_model,
-                    })
+                    }
+                
+                if tool_message_to_append:
+                    self.messages.append(tool_message_to_append)
+                    self.memory_tool.func(json.dumps(tool_message_to_append))
 
         if self.on_final_message:
             self.on_final_message("Max tool iterations reached. Please try again.")
