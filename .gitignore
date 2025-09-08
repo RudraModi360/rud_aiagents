@@ -3,3 +3,6 @@ __pycache__/
 images/
 reports.md
 **.xlsx
+.gradio/
+mcp_jugaad.py
+procedural_memory.py
