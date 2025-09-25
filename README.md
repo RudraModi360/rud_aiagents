@@ -2,151 +2,80 @@
 
 ## Project Overview
 
-This repository contains a lightweight, extensible **Python Agent** framework designed to run commands, manage tools, and provide a CLI interface. The structure is modular, separating command definitions, core functionality, tool integrations, and utility settings.
+This repository contains a versatile and extensible **Python Agent** framework. Initially designed for simple command-line operations, it has evolved to include a separate backend service, voice capabilities, persistent memory, and a more complex tool management system. The structure is modular, separating command definitions, core agent logic, backend services, tool integrations, and utility settings.
 
----
-
-## Docker
-
-To build the Docker image locally (since it is not uploaded to Docker Hub), run the following command in the project root:
-
-```bash
-docker build -t rud_ai-agent .
-```
-
-This will create a Docker image named `rud_ai-agent` using the provided `Dockerfile`.
 
 ## Project Structure
 
 The project is organized into several key directories and files, each serving a specific purpose in the overall functionality of the Python Agent framework.
 
-### Directories
-
-1. **commands/**: Contains the infrastructure for command handling.
-   - `base.py`: Defines the base class for all commands, providing a common interface.
-   - `registry.py`: Manages the registration of commands, making them discoverable.
-   - `definitions/`: Houses concrete implementations of commands.
-
-2. **core/**: Hosts the core functionality of the agent.
-   - `agent.py`: Implements the central `Agent` class that orchestrates commands and tools.
-   - `cli.py`: Handles the command-line interface, parsing user input and displaying results.
-
-3. **tools/**: Includes definitions for built-in tools.
-   - `tools.py`: Contains the collection of tool functions.
-   - `tool_schemas.py`: Defines Pydantic models for tool inputs and outputs, ensuring type safety.
-
-4. **utils/**: Provides utility functions and settings.
-   - `local_settings.py`: Stores local configuration such as API keys and default settings.
-
-### Files
-
-- `main.py`: The entry point for running the agent.
-- `__init__.py`: Marks the directory as a Python package.
-
-## Adding New Tools
-
-To add a new tool:
-1. Create a new module in `tools/`.
-2. Define a Pydantic schema for the tool's input and output.
-3. Implement the tool function.
-4. Register the tool in `tools/__init__.py`.
-
-## Contributing
-
-Contributions are welcome. Please follow the existing coding style and update the README as necessary.
-
 ```
-python_agent/
-├── __init__.py                     # Package initializer
-├── main.py                         # Entry point for running the agent
-├── commands/                       # Command infrastructure
-│   ├── __init__.py                 # Makes `commands` a package
-│   ├── base.py                     # Base class for all commands
-│   ├── registry.py                 # Registry that discovers and loads commands
-│   └── definitions/                # Concrete command implementations
-│       ├── __init__.py             # Makes `definitions` a package
-│       ├── clear.py                # Implements the `clear` command (clears screen)
-│       ├── help.py                 # Implements the `help` command (shows help)
-│       ├── login.py                # Implements the `login` command (auth handling)
-│       └── model.py                # Implements the `model` command (model selection)
-├── core/                           # Core engine of the agent
-│   ├── __init__.py (generated)     # (optional) package init for core
-│   ├── agent.py                    # High‑level Agent class orchestrating commands & tools
-│   └── cli.py                      # Command‑line interface handling user input
-├── tools/                          # Built‑in tool definitions
-│   ├── __init__.py (generated)     # (optional) package init for tools
-│   ├── tools.py                    # Definitions of built‑in tools (e.g., web search, file ops)
-│   └── tool_schemas.py             # Pydantic schemas describing tool input/output
-└── utils/                          # Helper utilities
-    ├── __init__.py (generated)     # (optional) package init for utils
-    └── local_settings.py           # Local configuration (API keys, defaults)
+D:/rud_aiagents/
+├── __init__.py             # Marks the root as a Python package
+├── main.py                 # Main entry point for the CLI agent
+├── Dockerfile              # Docker configuration for containerizing the agent
+├── mcp_tools.json          # Tool configuration for the MCP agent
+├── memory_test.py          # Script for testing memory functionality
+├── check.py                # General-purpose checking script
+├── backend/                # Contains a separate backend service
+│   ├── Agent.py            # Agent logic specific to the backend
+│   ├── main.py             # Entry point for the backend service
+│   ├── mcp_tools.json      # Tool configuration for the backend agent
+│   └── requirements.txt    # Python dependencies for the backend
+├── commands/               # Command infrastructure for the CLI
+│   ├── base.py             # Base class for all commands
+│   ├── registry.py         # Manages the registration and discovery of commands
+│   └── definitions/        # Concrete command implementations (help, login, etc.)
+├── core/                   # Core functionality of the agent
+│   ├── agent.py            # The central Agent class for the primary CLI
+│   ├── agent_mcp.py        # An alternative agent implementation (Multi-Context Prompting)
+│   ├── cli.py              # Handles the primary command-line interface
+│   ├── cli_mcp.py          # CLI handler for the MCP agent
+│   ├── memory.py           # Implements persistent memory for the agent
+│   └── narrator.py         # Handles descriptive text generation or voice narration
+├── tools/                  # Built-in tool definitions and schemas
+│   ├── tools.py            # Collection of core tool functions
+│   └── tool_schemas.py     # Pydantic models for tool inputs and outputs
+├── utils/                  # Helper utilities
+│   ├── fetch_json.py       # Utility for fetching JSON data
+│   └── local_settings.py   # Stores local configuration (API keys, defaults)
+└── voice/                  # Voice-related functionalities
+    ├── check.py            # Checking script for voice components
+    └── simple_voice_output.py # Script for simple text-to-speech output
 ```
-
-> **Note:** `__pycache__` directories are omitted for brevity; they contain compiled byte‑code.
 
 ---
 
-## Brief Description of Each File
+## Brief Description of Each Component
 
-| File | Purpose |
-|------|---------|
-| `__init__.py` (root) | Marks the repository as a Python package; can expose top‑level symbols. |
-| `main.py` | Small wrapper that creates an `Agent` instance and starts the CLI. |
-| `commands/base.py` | Abstract base class (`BaseCommand`) providing a common interface for all commands. |
-| `commands/registry.py` | Scans the `commands/definitions` package, registers each concrete command, and makes them discoverable. |
-| `commands/definitions/clear.py` | Implements a simple `clear` command to clear the terminal screen. |
-| `commands/definitions/help.py` | Implements a `help` command that lists available commands and their usage. |
-| `commands/definitions/login.py` | Handles user authentication / login flow for the agent. |
-| `commands/definitions/model.py` | Allows switching or configuring the underlying language model. |
-| `core/agent.py` | Central `Agent` class – loads commands, manages tool execution, and maintains state. |
-| `core/cli.py` | Parses user input from the terminal, maps it to commands, and displays results. |
-| `tools/tools.py` | Collection of built‑in tool functions (e.g., web search, file read/write). |
-| `tools/tool_schemas.py` | Pydantic models that define the schema for tool inputs and outputs, ensuring type safety. |
-| `utils/local_settings.py` | Stores local configuration such as API keys, default model names, and other environment‑specific settings. |
+| Path                      | Purpose                                                                                             |
+|---------------------------|-----------------------------------------------------------------------------------------------------|
+| `main.py`                 | The main entry point for starting the interactive CLI agent.                                        |
+| `mcp_tools.json`          | A JSON file defining the tools available to the `agent_mcp`, allowing for dynamic tool loading.     |
+| `backend/`                | A self-contained backend service, likely an API, that runs its own agent instance.                  |
+| `commands/`               | Manages the creation, registration, and execution of user-facing commands in the CLI.               |
+| `core/agent.py`           | The primary `Agent` class that orchestrates command execution, tool usage, and state management.    |
+| `core/agent_mcp.py`       | An alternative `Agent` class, likely for more complex, multi-step reasoning tasks.                  |
+| `core/cli.py` / `cli_mcp.py`| Manages the user interaction loop for the respective agent, handling input and displaying output.   |
+| `core/memory.py`          | Provides the agent with the ability to retain information across sessions.                          |
+| `core/narrator.py`        | Provides descriptive outputs or potentially integrates with voice systems.                          |
+| `tools/`                  | Contains the schemas and implementations for the various tools the agent can use (e.g., file I/O).  |
+| `utils/`                  | A collection of shared helper functions and configuration loaders.                                  |
+| `voice/`                  | Contains scripts for voice output, enabling the agent to speak its responses.                       |
 
 ---
 
-## Tools
+## Tools and Extensibility
 
-The Python Agent comes with the following built-in tools:
-1. `read_file`: Read file contents with optional line range.
-2. `create_file`: Create NEW files or directories.
-3. `edit_file`: Modify EXISTING files by exact text replacement.
-4. `delete_file`: Remove files or directories.
-5. `search_files`: Find text patterns in files across the codebase.
-6. `list_files`: Browse directory contents and file structure.
-7. `execute_command`: Run shell commands, scripts.
-8. `code_execute`: Run python code.
-9. `web_search`: Search the web for information.
+The agent's capabilities are extended through a robust tool system. Tools are defined in `tools/` and their availability can be configured via `mcp_tools.json`. This allows for different agent instances (e.g., `agent.py` vs. `agent_mcp.py`) to have different sets of capabilities.
 
-The framework is designed to let you plug in custom tools with minimal effort.
-
-1. **Create a new tool module** inside the `tools/` package, e.g., `my_tool.py`.
-2. **Define a Pydantic schema** (or reuse `tool_schemas.py`) that describes the input parameters and output format.
-3. **Implement the tool function** following the signature:
-   ```python
-   def my_tool(params: MyToolParams) -> ToolResult:
-       # Your logic here
-   ```
-4. **Register the tool** in `tools/__init__.py` (or modify `tools/tools.py`) by adding it to the exported dictionary:
-   ```python
-   from .my_tool import my_tool, MyToolParams, MyToolResult
-
-   TOOL_REGISTRY = {
-       "my_tool": tool_name() ##class for tool
-       # existing tools …
-   }
-   ```
-
-
-### Tips
-- Keep the tool **stateless** or manage state through the `Agent` instance.
-- Write unit tests for your tool to ensure it conforms to the declared schema.
-- Document the tool in this README under a new **Custom Tools** section.
+### Adding New Tools
+1.  **Implement the Tool:** Create the tool's function in `tools/tools.py` or a new module within `tools/`.
+2.  **Define the Schema:** Create a Pydantic model in `tools/tool_schemas.py` to define the tool's input parameters.
+3.  **Register the Tool:** If using `mcp_tools.json`, add a new entry describing the tool, its purpose, and its parameters.
 
 ---
 
 ## Contributing
 
-Feel free to submit pull requests for new commands, tools, or improvements. Follow the existing coding style and update the README when adding new top‑level modules.
-
+Contributions are welcome. Please follow the existing coding style and update this README with any significant changes to the architecture or addition of new top-level modules.
