@@ -1,14 +1,13 @@
 import asyncio
 import argparse
 import json
-import sys
 from core.agent_mcp import MCPAgent
 from commands.registry import CommandRegistry
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-with open("mcp_tools.json", "r") as f:
-    mcp_servers = json.loads(f.read())['mcpServers']
+with open("mcp_tools.json","r") as f:
+    mcp_servers=json.loads(f.read())['mcpServers']
 
 sessions = {}
 mcp_clients = {}
@@ -16,12 +15,16 @@ mcp_clients = {}
 async def init_sessions():
     for name, args in mcp_servers.items():
         params = StdioServerParameters(command=args.get('command'), args=args.get('args'))
+
         client = stdio_client(params)
         mcp_clients[name] = client
         read, write = await client.__aenter__()
+
         session = ClientSession(read, write)
         await session.__aenter__()
+
         await session.initialize()
+
         sessions[name] = session
         print(f"[SYSTEM] Connected to MCP server: {name}")
 
@@ -38,8 +41,6 @@ async def tool_approval_callback(tool_name: str, tool_args: dict) -> bool:
     return response == 'y'
 
 def final_message_callback(message: str):
-    # Clear the banner line before printing the final message
-    sys.stdout.write("\r\033[K")
     print(f"\n[ASSISTANT]\n{message}")
 
 def tool_start_callback(tool_name: str, tool_args: dict):
@@ -47,15 +48,10 @@ def tool_start_callback(tool_name: str, tool_args: dict):
 
 def tool_end_callback(tool_name: str, result: dict):
     print(f"\n[TOOL END] {tool_name} finished.")
-    if not result.get('success', False):
-        print(f"  Error: {result.get('error', 'Unknown error')}")
+    if not result['success']:
+        print(f"  Error: {result['error']}")
     else:
         print(f"  Result: {result.get('content', 'No content returned')}")
-
-
-def banner_callback(message: str):
-    sys.stdout.write(f"\r\033[K\033[94m{message}\033[0m")
-    sys.stdout.flush()
 
 async def main():
     parser = argparse.ArgumentParser(description="A Python agent that uses Groq.")
@@ -70,8 +66,7 @@ async def main():
         on_tool_approval=tool_approval_callback,
         on_final_message=final_message_callback,
         on_tool_start=tool_start_callback,
-        on_tool_end=tool_end_callback,
-        on_status=banner_callback
+        on_tool_end=tool_end_callback
     )
 
     print("Welcome to the Python Groq Agent. Type /help for commands.")
@@ -98,6 +93,5 @@ async def main():
                 print(f"\nAn error occurred: {e}")
     finally:
         await shutdown_sessions()
-
 if __name__ == "__main__":
     asyncio.run(main())
