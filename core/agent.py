@@ -97,6 +97,7 @@ Be direct and efficient.
                 temperature=self.temperature,
             )
 
+
             message = response.choices[0].message
             # print("Message : ",message)
             self.messages.append(message)

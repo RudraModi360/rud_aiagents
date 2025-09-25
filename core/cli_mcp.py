@@ -52,6 +52,7 @@ def tool_end_callback(tool_name: str, result: dict):
     else:
         print(f"  Result: {result.get('content', 'No content returned')}")
 
+
 def banner_callback(message: str):
     sys.stdout.write(f"\r\033[K\033[94m{message}\033[0m")
     sys.stdout.flush()

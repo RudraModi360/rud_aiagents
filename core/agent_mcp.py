@@ -13,6 +13,7 @@ from langmem import create_manage_memory_tool
 from core.narrator import Narrator
 from core.memory import MemoryManager
 
+
 class MCPAgent:
     def __init__(
         self,
