@@ -1,18 +1,15 @@
 import os
 import json
-import asyncio
 from groq import Groq
 from typing import List, Dict, Any, Callable, Awaitable
 from mcp import ClientSession
-from datetime import datetime
 from mcp.shared.metadata_utils import get_display_name
 from utils.local_settings import ConfigManager
-from tools.tool_schemas import ALL_TOOL_SCHEMAS, DANGEROUS_TOOLS, APPROVAL_REQUIRED_TOOLS, SAFE_TOOLS
-from tools.tools import execute_tool, store
+from tools.tool_schemas import ALL_TOOL_SCHEMAS, DANGEROUS_TOOLS, APPROVAL_REQUIRED_TOOLS,SAFE_TOOLS
+from tools.tools import execute_tool
+from utils.local_settings import ConfigManager
 from langmem import create_manage_memory_tool
-from core.narrator import Narrator
-from core.memory import MemoryManager
-
+from tools.tools import store
 
 class MCPAgent:
     def __init__(
@@ -27,9 +24,9 @@ class MCPAgent:
         self.config_manager = ConfigManager()
         self.api_key = self.config_manager.get_api_key() or os.environ.get("GROQ_API_KEY")
         self.client = Groq(api_key=self.api_key) if self.api_key else None
+        self.messages: List[Dict[str, Any]] = []
         self.system_message = system_message or self._build_default_system_message()
-        self.memory = MemoryManager(client=self.client)
-        self.memory.add_message({"role": "system", "content": self.system_message})
+        self.messages.append({"role": "system", "content": self.system_message})
         self.debug = debug
         self.memory_tool = create_manage_memory_tool(namespace=("messages",), store=store)
 
@@ -38,17 +35,12 @@ class MCPAgent:
         self.on_tool_end: Callable[[str, Any], None] = None
         self.on_tool_approval: Callable[[str, Dict], Awaitable[bool]] = None
         self.on_final_message: Callable[[str], None] = None
-        self.on_status: Callable[[str], None] = None
 
-        # Narrator
-        self.narrator = Narrator(client=self.client, model="llama-3.1-8b-instant", on_status=None)
     def _build_default_system_message(self) -> str:
         return f"""
     You are "Rudy", a coding assistant powered by {self.model} on Groq and developed by RudraModi360.  
 You have access to file-system tools, Groq code execution, shell (Windows PowerShell/CMD), web search, URL fetch, and MCP connectors.  
 Your role is to build, modify, and test software in a safe, efficient, and idiomatic way, strictly following the rules below.  
-
-## Today's Date : {datetime.today().strftime('%Y-%m-%d')}
 
 # GLOBAL RULES
 1. **Always Check First:**  
@@ -231,27 +223,27 @@ End of directive.
         on_tool_end: Callable[[str, Any], None] = None,
         on_tool_approval: Callable[[str, Dict], Awaitable[bool]] = None,
         on_final_message: Callable[[str], None] = None,
-        on_status: Callable[[str], None] = None,
     ):
         self.on_tool_start = on_tool_start
         self.on_tool_end = on_tool_end
         self.on_tool_approval = on_tool_approval
         self.on_final_message = on_final_message
-        self.on_status = on_status
-        if on_status:
-            self.narrator.on_status = on_status
 
     def set_api_key(self, api_key: str):
         self.api_key = api_key
         self.client = Groq(api_key=self.api_key)
         self.config_manager.set_api_key(api_key)
-        self.narrator.client = self.client
 
     def clear_history(self):
-        self.memory.clear()
-        self.memory.add_message({"role": "system", "content": self.system_message})
-
-    def list_mcp_tools_schema(self, tools: list):
+        for msg in self.messages:
+            if isinstance(msg,dict):
+                if msg['role'] != 'system':
+                    self.messages.remove(msg)
+            else:
+                if msg.role != 'system':
+                    self.messages.remove(msg)
+        
+    def list_mcp_tools_schema(self,tools:list):
         formatted_tools = []
         for tool in tools.tools:
             schema = {
@@ -259,7 +251,8 @@ End of directive.
                 "function": {
                     "name": tool.name,
                     "description": tool.description or get_display_name(tool),
-                    "parameters": tool.inputSchema,
+                    "parameters": tool.inputSchema,  # already JSON schema
+                    
                 }
             }
             formatted_tools.append(schema)
@@ -270,13 +263,12 @@ End of directive.
             raise ValueError("API key not set. Please set it via set_api_key or GROQ_API_KEY env var.")
 
         user_message = {"role": "user", "content": user_input}
-        self.memory.add_message(user_message)
+        self.messages.append(user_message)
         self.memory_tool.func(json.dumps(user_message))
-        self.narrator.say(f"👤 User asked: {user_input}", use_llm=True)
-
+        
         all_mcp_tools_list = []
         mcp_tool_to_session_map = {}
-
+        
         class ToolsContainer:
             def __init__(self, tools):
                 self.tools = tools
@@ -286,59 +278,48 @@ End of directive.
             all_mcp_tools_list.extend(mcp_tools.tools)
             for tool in mcp_tools.tools:
                 mcp_tool_to_session_map[tool.name] = session
-
+        
         mcp_tool_names = set(mcp_tool_to_session_map.keys())
         mcp_tools_container = ToolsContainer(all_mcp_tools_list)
-
+        
         all_tool_schemas = self.list_mcp_tools_schema(mcp_tools_container) + ALL_TOOL_SCHEMAS
-
+ 
         max_iterations = 10
         for _ in range(max_iterations):
-            thinking_hints = [
-                "Analyzing the request...",
-                "Formulating a plan...",
-                "Considering the next steps...",
-                "Checking for relevant tools...",
-                "Almost ready..."
-            ]
-            response = await self.narrator.with_status_updates(
-                self.client.chat.completions.create,
-                hints=thinking_hints,
+            response = self.client.chat.completions.create(
                 model=self.model,
-                messages=self.memory.get_context(),
+                messages=self.messages,
                 tools=all_tool_schemas,
                 tool_choice="auto",
                 parallel_tool_calls=True,
                 temperature=self.temperature,
             )
+
             message = response.choices[0].message
-            assistant_message = {"role": "assistant"}
-            if message.content:
-                assistant_message["content"] = message.content
-            if message.tool_calls:
-                assistant_message["tool_calls"] = [tc.model_dump() for tc in message.tool_calls]
-            self.memory.add_message(assistant_message)
-            self.memory_tool.func(json.dumps(assistant_message))
+            self.messages.append(message)
+            self.memory_tool.func(json.dumps(message.model_dump()))
 
             if not message.tool_calls:
-                self.narrator.say("💬 Drafting final response...", use_llm=True)
                 if self.on_final_message:
                     self.on_final_message(message.content)
                 return
-
+            
+            print("Tool Calling : ", message.tool_calls)
+            
             for tool_call in message.tool_calls:
                 tool_name = tool_call.function.name
                 is_mcp_tool = tool_name in mcp_tool_names
                 tool_args = json.loads(tool_call.function.arguments)
 
-                self.narrator.say(f"🛠️ Preparing to use `{tool_name}`", use_llm=True)
                 if self.on_tool_start:
                     self.on_tool_start(tool_name, tool_args)
-
+                
+                print("MCP/Built-in : ", is_mcp_tool)
                 tool_message_to_append = None
+                
                 if not is_mcp_tool:  # Built-in tools
                     needs_approval = tool_name in DANGEROUS_TOOLS or tool_name in APPROVAL_REQUIRED_TOOLS
-
+                
                     if needs_approval and self.on_tool_approval:
                         approved = await self.on_tool_approval(tool_name, tool_args)
                         if not approved:
@@ -347,11 +328,10 @@ End of directive.
                             tool_result = execute_tool(tool_name, tool_args)
                     else:
                         tool_result = execute_tool(tool_name, tool_args)
-
+                        
                     if self.on_tool_end:
                         self.on_tool_end(tool_name, tool_result)
-
-                    self.narrator.say(f"✅ `{tool_name}` finished", use_llm=True)
+                    
                     tool_message_to_append = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
@@ -359,8 +339,8 @@ End of directive.
                     }
                 else:  # MCP tools
                     session_for_tool = mcp_tool_to_session_map[tool_name]
-                    needs_approval = any(x in tool_name for x in ["create", "delete", "edit", "send"])
-
+                    needs_approval = "create" in tool_name or "delete" in tool_name or "edit" in tool_name or "send" in tool_name
+                    
                     tool_result_for_model = None
                     approved = True
                     if needs_approval and self.on_tool_approval:
@@ -372,14 +352,14 @@ End of directive.
                             self.on_tool_end(tool_name, error_content)
                         tool_result_for_model = json.dumps(error_content)
                     else:
-                        tool_result = await self.narrator.with_status_updates(
-                            session_for_tool.call_tool(name=tool_name, arguments=tool_args)
-                        )
+                        tool_result = await session_for_tool.call_tool(name=tool_name, arguments=tool_args)
+                        print("tool_result : ",tool_result," Type : ",type(tool_result))
                         if tool_result:
-                            processed_content = tool_result.content
-                            if isinstance(processed_content, list):
+                            raw_content = tool_result.content
+                            processed_content = raw_content
+                            if isinstance(raw_content, list):
                                 new_list = []
-                                for item in processed_content:
+                                for item in raw_content:
                                     if hasattr(item, 'text') and isinstance(item.text, str):
                                         try:
                                             new_list.append(json.loads(item.text))
@@ -388,37 +368,49 @@ End of directive.
                                     else:
                                         new_list.append(item)
                                 processed_content = new_list
-                            elif hasattr(processed_content, 'text') and isinstance(processed_content.text, str):
+                            elif hasattr(raw_content, 'text') and isinstance(raw_content.text, str):
                                 try:
-                                    processed_content = json.loads(processed_content.text)
+                                    processed_content = json.loads(raw_content.text)
                                 except json.JSONDecodeError:
-                                    processed_content = processed_content.text
+                                    processed_content = raw_content.text
 
                             if tool_result.isError:
-                                content_for_model = tool_result.structuredContent or {"result": processed_content or 'MCP tool execution failed.'}
+                                content_for_model = tool_result.structuredContent
+                                if content_for_model is None:
+                                    content_for_model = {'result': processed_content or 'MCP tool execution failed.'}
+                                
                                 if self.on_tool_end:
-                                    self.on_tool_end(tool_name, {"success": False, "error": str(content_for_model)})
+                                    error_for_display = content_for_model
+                                    if isinstance(content_for_model, dict):
+                                        error_for_display = content_for_model.get('result', json.dumps(content_for_model))
+                                    else:
+                                        error_for_display = str(content_for_model)
+                                    self.on_tool_end(tool_name, {"success": False, "error": error_for_display})
+                                
                                 tool_result_for_model = json.dumps(content_for_model)
-                            else:
-                                content_for_model = tool_result.structuredContent or processed_content
+                            else: # success
+                                content_for_model = tool_result.structuredContent
+                                if content_for_model is None:
+                                    content_for_model = processed_content
+                                
                                 if self.on_tool_end:
                                     self.on_tool_end(tool_name, {"success": True, "content": content_for_model})
+                                
                                 tool_result_for_model = json.dumps(content_for_model)
-                        else:
+                        else: # no result
                             error_content = {"success": False, "error": "MCP tool returned no result."}
                             if self.on_tool_end:
                                 self.on_tool_end(tool_name, error_content)
                             tool_result_for_model = json.dumps(error_content)
-
-                    self.narrator.say(f"✅ `{tool_name}` completed", use_llm=True)
+                
                     tool_message_to_append = {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": tool_result_for_model,
                     }
-
+                
                 if tool_message_to_append:
-                    self.memory.add_message(tool_message_to_append)
+                    self.messages.append(tool_message_to_append)
                     self.memory_tool.func(json.dumps(tool_message_to_append))
 
         if self.on_final_message:
