@@ -10,6 +10,7 @@ from tools.tools import execute_tool
 from utils.local_settings import ConfigManager
 from langmem import create_manage_memory_tool
 from tools.tools import store
+from core.memory import MemoryManager
 
 class MCPAgent:
     def __init__(
@@ -17,16 +18,42 @@ class MCPAgent:
         model: str = 'openai/gpt-oss-120b',
         temperature: float = 0.7,
         system_message: str = None,
-        debug: bool = False
+        debug: bool = False,
+        max_context_tokens: int = 6000,
+        memory_summarization_threshold: float = 0.75
     ):
+        """
+        Initialize MCPAgent with integrated context management.
+        
+        Args:
+            model: The Groq model to use
+            temperature: Sampling temperature for generation
+            system_message: Custom system message (uses default if None)
+            debug: Enable debug logging
+            max_context_tokens: Maximum tokens to keep in context (default: 6000)
+            memory_summarization_threshold: When to trigger summarization (0.0-1.0, default: 0.75)
+        """
         self.model = model
         self.temperature = temperature
         self.config_manager = ConfigManager()
         self.api_key = self.config_manager.get_api_key() or os.environ.get("GROQ_API_KEY")
         self.client = Groq(api_key=self.api_key) if self.api_key else None
-        self.messages: List[Dict[str, Any]] = []
+        
+        # Initialize MemoryManager for intelligent context management
+        # This replaces direct self.messages manipulation and adds automatic summarization
+        self.memory = MemoryManager(
+            max_tokens=max_context_tokens,
+            summary_trigger_ratio=memory_summarization_threshold,
+            keep_recent_messages=6
+        )
+        
+        # Deprecated: kept for backwards compatibility, but use self.memory instead
+        # This property allows old code to still work while we transition
+        self._messages_compat = []
+        
         self.system_message = system_message or self._build_default_system_message()
-        self.messages.append({"role": "system", "content": self.system_message})
+        self.memory.add_message({"role": "system", "content": self.system_message})
+        
         self.debug = debug
         self.memory_tool = create_manage_memory_tool(namespace=("messages",), store=store)
 
@@ -35,6 +62,22 @@ class MCPAgent:
         self.on_tool_end: Callable[[str, Any], None] = None
         self.on_tool_approval: Callable[[str, Dict], Awaitable[bool]] = None
         self.on_final_message: Callable[[str], None] = None
+    
+    @property
+    def messages(self) -> List[Dict[str, Any]]:
+        """
+        Backwards compatibility property for accessing messages.
+        Returns the managed message list from MemoryManager.
+        """
+        return self.memory.messages
+    
+    @messages.setter
+    def messages(self, value: List[Dict[str, Any]]) -> None:
+        """
+        Backwards compatibility setter for messages.
+        Updates the MemoryManager's message list.
+        """
+        self.memory.messages = value
 
     def _build_default_system_message(self) -> str:
         return f"""
@@ -219,13 +262,11 @@ End of directive.
         self.config_manager.set_api_key(api_key)
 
     def clear_history(self):
-        for msg in self.messages:
-            if isinstance(msg,dict):
-                if msg['role'] != 'system':
-                    self.messages.remove(msg)
-            else:
-                if msg.role != 'system':
-                    self.messages.remove(msg)
+        """
+        Clear conversation history while preserving system message.
+        Uses MemoryManager's clear_history method which is more efficient.
+        """
+        self.memory.clear_history(keep_system=True)
         
     def list_mcp_tools_schema(self,tools:list):
         formatted_tools = []
@@ -243,11 +284,23 @@ End of directive.
         return formatted_tools
 
     async def chat(self, sessions: Dict[str, ClientSession], user_input: str):
+        """
+        Main chat loop with integrated context management.
+        
+        The MemoryManager automatically:
+        1. Tracks all messages (user, assistant, tool)
+        2. Estimates token count before each API call
+        3. Summarizes old context when approaching token limits
+        4. Ensures we stay within max_context_tokens
+        
+        This prevents context overflow errors and reduces API costs.
+        """
         if not self.client:
             raise ValueError("API key not set. Please set it via set_api_key or GROQ_API_KEY env var.")
 
         user_message = {"role": "user", "content": user_input}
-        self.messages.append(user_message)
+        # Add message through MemoryManager for tracking
+        self.memory.add_message(user_message)
         self.memory_tool.func(json.dumps(user_message))
         
         all_mcp_tools_list = []
@@ -269,10 +322,20 @@ End of directive.
         all_tool_schemas = self.list_mcp_tools_schema(mcp_tools_container) + ALL_TOOL_SCHEMAS
  
         max_iterations = 10
-        for _ in range(max_iterations):
+        for iteration in range(max_iterations):
+            # Get trimmed messages from MemoryManager
+            # This automatically summarizes old context if needed to stay under token limits
+            trimmed_messages = self.memory.get_trimmed_messages()
+            
+            # Show memory stats in debug mode
+            if self.debug or iteration == 0:
+                stats = self.memory.get_stats()
+                print(f"📊 Memory: {stats['total_messages']} msgs, {stats['total_tokens']} tokens "
+                      f"({stats['utilization']}), {stats['summarization_count']} summaries")
+            
             response = self.client.chat.completions.create(
                 model=self.model,
-                messages=self.messages,
+                messages=trimmed_messages,  # Use trimmed messages instead of raw self.messages
                 tools=all_tool_schemas,
                 tool_choice="auto",
                 parallel_tool_calls=True,
@@ -280,7 +343,8 @@ End of directive.
             )
 
             message = response.choices[0].message
-            self.messages.append(message)
+            # Add assistant message through MemoryManager
+            self.memory.add_message(message)
             self.memory_tool.func(json.dumps(message.model_dump()))
 
             if not message.tool_calls:
@@ -394,7 +458,8 @@ End of directive.
                     }
                 
                 if tool_message_to_append:
-                    self.messages.append(tool_message_to_append)
+                    # Add tool result through MemoryManager for tracking
+                    self.memory.add_message(tool_message_to_append)
                     self.memory_tool.func(json.dumps(tool_message_to_append))
 
         if self.on_final_message:

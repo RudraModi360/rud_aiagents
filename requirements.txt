@@ -1,0 +1,17 @@
+# Core dependencies
+groq
+mcp
+langmem
+
+# Optional: For accurate token counting
+# Highly recommended for production use
+tiktoken
+
+# Testing
+pytest
+pytest-asyncio
+
+# Code quality
+pylint
+black
+
