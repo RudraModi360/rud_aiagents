@@ -6,19 +6,11 @@ import requests
 # import docker
 from typing import Dict, Any, Set,Optional,List,Union
 from groq import Groq
-from langmem import create_manage_memory_tool, create_search_memory_tool
 from langgraph.store.memory import InMemoryStore
 
 
 
 client_groq = Groq()
-store = InMemoryStore(
-    index={
-        "dims": 784,
-        "embed": "ollama:nomic-embed-text:v1.5",  # embedding model
-    }
-)
-
 # --- Tool-related state ---
 global_read_files_tracker: Set[str] = set()
 # client = docker.from_env()
@@ -334,16 +326,6 @@ def url_fetch(url: str) -> ToolResult:
     except requests.exceptions.RequestException as e:
         return ToolResult(success=False, error=f"Failed to fetch URL: {e}")
 
-def search_memory(query:str):
-    search_tool = create_search_memory_tool(namespace=("messages",), store=store)
-    result = ast.literal_eval(search_tool.func(query))
-    return ToolResult(success=True, content=result[:5])
-
-def manage_memory(input_data: Union[str, Dict[str, Any]]):
-    memory_tool = create_manage_memory_tool(namespace=("messages",), store=store)
-    memory_tool.func(input_data)
-    return ToolResult(success=True, content="Data is Added into Memory Successfully.")
-
 # --- Tool Registry and Execution ---
 
 TOOL_REGISTRY = {
@@ -356,9 +338,7 @@ TOOL_REGISTRY = {
     "execute_command": execute_command,
     "code_execute": sandbox_code_execute,
     "web_search": web_search,
-    "url_fetch": url_fetch,
-    "manage_memory": manage_memory,
-    "search_memory": search_memory
+    "url_fetch": url_fetch
 }
 
 def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> ToolResult:

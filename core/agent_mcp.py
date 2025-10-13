@@ -163,22 +163,6 @@ C) **Output:**
 
 ---
 
-# MEMORY (manage_memory / search_memory)
-A) **Use Cases:**
-- `manage_memory`: To remember key facts, user preferences, or conversation summaries for future sessions. The document should be a concise piece of information.
-- `search_memory`: To retrieve information that was previously stored. Use this to recall context from past conversations.
-
-B) **Rules:**
-- Before asking the user for information they might have already provided, use `search_memory`.
-- When learning a new important piece of information that should be remembered, use `manage_memory`.
-- The memory is for long-term storage. Do not clutter it with trivial details from the current conversation. Store summaries or key takeaways.
-
-C) **Output:**
-- `manage_memory`: Returns a confirmation of storage.
-- `search_memory`: Returns relevant memories found.
-
----
-
 # ENGINEERING PRACTICES
 1. **Tests:** Always add at least one unit test with sample input/output.  
 2. **Docs:** Every file → short top-of-file docstring with usage/examples.  
