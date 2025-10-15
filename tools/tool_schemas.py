@@ -190,6 +190,21 @@ SEARCH_MEMORY = {
 }
 
 
+class FastGrepParams(BaseModel):
+    keyword: str = Field(..., description='The keyword or regex pattern to search for.')
+    directory: str = Field('.', description='The directory to search in.')
+    file_pattern: Optional[str] = Field(None, description='Glob pattern to filter files to be searched (e.g., "*.py", "**/*.js").')
+
+FAST_GREP_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "fast_grep",
+        "description": "Efficiently search for a keyword or regex pattern across a large number of files in a directory using ripgrep (rg).",
+        "parameters": FastGrepParams.model_json_schema()
+    }
+}
+
+
 # All tools combined
 ALL_TOOL_SCHEMAS = [
     READ_FILE_SCHEMA,
@@ -203,7 +218,8 @@ ALL_TOOL_SCHEMAS = [
     WEB_SEARCH,
     URL_FETCH_SCHEMA,
     MANAGE_MEMORY,
-    SEARCH_MEMORY
+    SEARCH_MEMORY,
+    FAST_GREP_SCHEMA
 ]
 
 # Tool categories

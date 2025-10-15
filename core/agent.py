@@ -2,7 +2,7 @@ import os
 import json
 from groq import Groq
 from typing import List, Dict, Any, Callable, Awaitable
-
+from prompts.system_msg import get_system_prompt
 from tools.tool_schemas import ALL_TOOL_SCHEMAS, DANGEROUS_TOOLS, APPROVAL_REQUIRED_TOOLS
 from tools.tools import execute_tool
 from utils.local_settings import ConfigManager
@@ -24,6 +24,7 @@ class Agent:
         self.system_message = system_message or self._build_default_system_message()
         self.messages.append({"role": "system", "content": self.system_message})
         self.debug = debug
+        self.max_context_tokens = 8000  # Max tokens for context window
 
         # Callbacks
         self.on_tool_start: Callable[[str, Dict], None] = None
@@ -32,35 +33,7 @@ class Agent:
         self.on_final_message: Callable[[str], None] = None
 
     def _build_default_system_message(self) -> str:
-        return f"""You are a coding assistant powered by {self.model} on Groq. Tools are available to you. Use tools to complete tasks.
-
-You have access to read-search across my local file-system's file too. here is my user's path  : {os.path.expanduser('~')}
- and my current dir {os.getcwd()}
-
-CRITICAL: For ANY implementation request (building apps, creating components, writing code), you MUST use tools to create actual files. NEVER provide text-only responses for coding tasks that require implementation.
-
-Use tools to:
-- Read and understand files (read_file, list_files)
-- Create, edit, and manage files (create_file, edit_file, delete_file)
-- Execute bash commands (execute_command)
-- Run python code in sandbox using the (code_execute)
-
-FILE OPERATION DECISION TREE:
-- ALWAYS check if file exists FIRST using list_files or read_file
-- Need to modify existing content? → read_file first, then edit_file (never create_file)
-- Need to create something new? → list_files to check existence first, then create_file
-- File exists but want to replace completely? → create_file with overwrite=True
-- Unsure if file exists? → list_files or read_file to check first
-- MANDATORY: read_file before any edit_file operation
-
-IMPORTANT: When creating files, keep them focused and reasonably sized. For large applications:
-1. Start with a simple, minimal version first
-2. Create separate files for different components
-3. Build incrementally rather than generating massive files at once
-
-Be direct and efficient.
-"""
-
+        return get_system_prompt(self.model)
     def set_tool_callbacks(
         self,
         on_tool_start: Callable[[str, Dict], None] = None,
@@ -89,6 +62,7 @@ Be direct and efficient.
 
         max_iterations = 30
         for _ in range(max_iterations):
+            self.messages = self.messages
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=self.messages,
