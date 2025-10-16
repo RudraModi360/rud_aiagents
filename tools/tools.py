@@ -332,54 +332,10 @@ def url_fetch(url: str) -> ToolResult:
 
 def fast_grep(keyword: str, directory: str = '.', file_pattern: Optional[str] = None) -> ToolResult:
     """
-    Uses ripgrep (rg) to efficiently search for a keyword in a directory.
+    Search for a keyword in a directory using the built-in search_files tool.
+    This is an alias for search_files.
     """
-    try:
-        import shutil
-        if not shutil.which('rg'):
-            return ToolResult(success=False, error="ripgrep (rg) is not installed or not in PATH. This tool requires it for fast searching.")
-
-        abs_path = os.path.abspath(directory)
-        if not os.path.isdir(abs_path):
-            return ToolResult(success=False, error="Directory not found.")
-
-        command = ['rg', '--json', keyword, abs_path]
-        if file_pattern:
-            command.extend(['--glob', file_pattern])
-
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False
-        )
-
-        if result.returncode != 0 and result.returncode != 1: # rg exits 1 if no matches found
-            return ToolResult(success=False, error=f"ripgrep command failed with exit code {result.returncode}:\n{result.stderr}")
-
-        # Parse the JSON output
-        matches = []
-        for line in result.stdout.strip().split('\n'):
-            if line:
-                try:
-                    data = json.loads(line)
-                    if data['type'] == 'match':
-                        matches.append({
-                            'file': data['data']['path']['text'],
-                            'line_number': data['data']['line_number'],
-                            'text': data['data']['lines']['text'].strip()
-                        })
-                except (json.JSONDecodeError, KeyError):
-                    # Ignore lines that are not valid JSON matches (like summaries)
-                    pass
-        
-        if not matches and result.returncode == 1:
-             return ToolResult(success=True, content="No matches found.")
-
-        return ToolResult(success=True, content=matches)
-
-    except Exception as e:
-        return ToolResult(success=False, error=f"Failed to execute fast_grep: {e}")
+    return search_files(pattern=keyword, directory=directory, file_pattern=file_pattern or '*')
 
 # --- Tool Registry and Execution ---
 

@@ -110,7 +110,7 @@ SEARCH_FILES_SCHEMA = {
     "type": "function",
     "function": {
         "name": "search_files",
-        "description": "Find text patterns in ficles across the codebase.",
+        "description": "Find text patterns in files across the codebase.",
         "parameters": SearchFilesParams.model_json_schema()
     }
 }
@@ -199,7 +199,7 @@ FAST_GREP_SCHEMA = {
     "type": "function",
     "function": {
         "name": "fast_grep",
-        "description": "Efficiently search for a keyword or regex pattern across a large number of files in a directory using ripgrep (rg).",
+        "description": "Search for a keyword or regex pattern in a directory. This is an alias for the search_files tool.",
         "parameters": FastGrepParams.model_json_schema()
     }
 }
