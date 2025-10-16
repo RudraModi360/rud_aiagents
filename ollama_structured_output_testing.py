@@ -95,7 +95,7 @@ class OllamaAgent:
 
                 tool_message = {
                     "role": "tool",
-                    "tool_call_id": tool_call['id'],
+                    "tool_call_name": tool_call['function']['name'],
                     "content": json.dumps(tool_result),
                 }
                 tool_messages_to_append.append(tool_message)
